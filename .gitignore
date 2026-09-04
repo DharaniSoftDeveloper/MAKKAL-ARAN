@@ -1,0 +1,56 @@
+# ==== SECRETS / CREDENTIALS — never commit ====
+serviceAccountKey.json
+*firebase-adminsdk*.json
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+apps/patrol/lib/.env
+apps/control-room/.env
+backend/.env
+
+# ==== Node ====
+node_modules/
+npm-debug.log*
+
+# ==== Python venvs ====
+.venv*/
+venv/
+
+# ==== Flutter / Dart ====
+.dart_tool/
+.flutter-plugins*
+*.iml
+.pub-cache/
+
+# ==== Android / Gradle build artifacts ====
+.gradle/
+build/
+app/build/
+local.properties
+**/android/app/.cxx/
+
+# ==== Web / Electron build outputs ====
+dist/
+release/
+electron-temp/
+
+# ==== Release binaries (large; keep out of git) ====
+*.apk
+*.aab
+*.exe
+*.msi
+*.zip
+*.blockmap
+
+# ==== Logs / temp ====
+*.log
+*_out.log
+*_err.log
+__pycache__/
+*.tmp
+
+# ==== OS ====
+Thumbs.db
+.DS_Store
