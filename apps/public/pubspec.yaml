@@ -1,7 +1,7 @@
 name: safesight_public
 description: MakkalAran Public Application - Community safety with SOS alerts and incident reporting.
 publish_to: 'none'
-version: 1.4.0+106
+version: 1.4.1+107
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

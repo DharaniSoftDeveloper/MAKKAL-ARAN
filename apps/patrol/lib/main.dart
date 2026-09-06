@@ -178,15 +178,13 @@ class FirestoreService {
     final now = DateTime.now().toUtc().toIso8601String();
     // 1) Fast path: PATCH the dispatch status directly in Supabase.
     try {
-      final { data, error } = await _client
+      final res = await _client
           .from('dispatches')
           .update({'status': 'ACCEPTED', 'accepted_at': now, 'updated_at': now})
           .eq('dispatch_id', dispatchId)
           .select('dispatch_id')
           .maybeSingle();
-      if (error != null) throw Exception(error.message);
-      if (data != null) {
-        // Best-effort: also record the attempt + notify the backend (non-blocking).
+      if (res != null) {
         _recordAttempt(dispatchId, 'ACCEPTED', null);
         _notifyBackendAccept(dispatchId);
         return;
@@ -212,14 +210,13 @@ class FirestoreService {
   static Future<void> declineDispatch(String dispatchId, String reason) async {
     final now = DateTime.now().toUtc().toIso8601String();
     try {
-      final { data, error } = await _client
+      final res = await _client
           .from('dispatches')
           .update({'status': 'DECLINED', 'decline_reason': reason, 'declined_at': now, 'updated_at': now})
           .eq('dispatch_id', dispatchId)
           .select('dispatch_id')
           .maybeSingle();
-      if (error != null) throw Exception(error.message);
-      if (data != null) {
+      if (res != null) {
         _recordAttempt(dispatchId, 'DECLINED', reason);
         _notifyBackendDecline(dispatchId, reason);
         return;
