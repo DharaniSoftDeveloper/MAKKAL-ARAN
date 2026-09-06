@@ -9,7 +9,7 @@
       "FIXED: update loop — app now reads its real installed version",
       "Faster, more reliable OTA updates via Supabase"
     ],
-    "forceUpdate": false,
+    "forceUpdate": true,
     "minVersionCode": 104
   },
   "public": {
@@ -22,7 +22,7 @@
       "See response routes from assigned patrols to active SOS alerts",
       "Faster, more reliable OTA updates"
     ],
-    "forceUpdate": false,
+    "forceUpdate": true,
     "minVersionCode": 104
   },
   "releaseDate": "2026-09-06",

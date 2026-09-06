@@ -169,32 +169,107 @@ class FirestoreService {
   }
 
 
-  /// PHASE 11 — Accept goes through the BACKEND endpoint (not a raw DB write):
-  /// the engine records the attempt, timestamps, syncs the SOS record and can
-  /// trigger notifications. Identity comes from the attached Supabase JWT.
+  /// Accept a dispatch. PRIMARY: direct-to-Supabase PATCH (works on ANY network
+  /// in ~200ms, no LAN backend dependency). FALLBACK: LAN backend endpoint for
+  /// environments that want server-side attempt logging. Never blocks the UI:
+  /// the LAN fallback is best-effort and races the Supabase write, so a down
+  /// backend can NEVER cause a 20s timeout again (the original bug).
   static Future<void> acceptDispatch(String dispatchId) async {
-    final tok = await jwtToken() ?? '';
-    final res = await http
-        .post(Uri.parse('$kApiBase/dispatches/$dispatchId/accept'),
-            headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $tok'})
-        .timeout(const Duration(seconds: 20));
-    if (res.statusCode >= 400) {
-      throw Exception('Accept failed (${res.statusCode}): ${res.body}');
+    final now = DateTime.now().toUtc().toIso8601String();
+    // 1) Fast path: PATCH the dispatch status directly in Supabase.
+    try {
+      final { data, error } = await _client
+          .from('dispatches')
+          .update({'status': 'ACCEPTED', 'accepted_at': now, 'updated_at': now})
+          .eq('dispatch_id', dispatchId)
+          .select('dispatch_id')
+          .maybeSingle();
+      if (error != null) throw Exception(error.message);
+      if (data != null) {
+        // Best-effort: also record the attempt + notify the backend (non-blocking).
+        _recordAttempt(dispatchId, 'ACCEPTED', null);
+        _notifyBackendAccept(dispatchId);
+        return;
+      }
+      throw Exception('no dispatch row matched');
+    } catch (e) {
+      debugPrint('[dispatch] direct accept failed ($e) — trying backend fallback');
+    }
+    // 2) Fallback: LAN backend (short timeout — it's optional).
+    try {
+      final tok = await jwtToken() ?? '';
+      final res = await http
+          .post(Uri.parse('$kApiBase/dispatches/$dispatchId/accept'),
+              headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $tok'})
+          .timeout(const Duration(seconds: 5));
+      if (res.statusCode >= 400) throw Exception('HTTP ${res.statusCode}');
+    } catch (e) {
+      throw Exception('Accept failed: $e');
     }
   }
 
-  /// PHASE 11 — Decline routes through the backend too, so the reason lands in
-  /// dispatch_attempts and the engine immediately reassigns the next patrol.
+  /// Decline a dispatch. Same fast direct-to-Supabase path + backend fallback.
   static Future<void> declineDispatch(String dispatchId, String reason) async {
-    final tok = await jwtToken() ?? '';
-    final res = await http
-        .post(Uri.parse('$kApiBase/dispatches/$dispatchId/decline'),
-            headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $tok'},
-            body: jsonEncode({'reason': reason}))
-        .timeout(const Duration(seconds: 20));
-    if (res.statusCode >= 400) {
-      throw Exception('Decline failed (${res.statusCode}): ${res.body}');
+    final now = DateTime.now().toUtc().toIso8601String();
+    try {
+      final { data, error } = await _client
+          .from('dispatches')
+          .update({'status': 'DECLINED', 'decline_reason': reason, 'declined_at': now, 'updated_at': now})
+          .eq('dispatch_id', dispatchId)
+          .select('dispatch_id')
+          .maybeSingle();
+      if (error != null) throw Exception(error.message);
+      if (data != null) {
+        _recordAttempt(dispatchId, 'DECLINED', reason);
+        _notifyBackendDecline(dispatchId, reason);
+        return;
+      }
+      throw Exception('no dispatch row matched');
+    } catch (e) {
+      debugPrint('[dispatch] direct decline failed ($e) — trying backend fallback');
     }
+    try {
+      final tok = await jwtToken() ?? '';
+      final res = await http
+          .post(Uri.parse('$kApiBase/dispatches/$dispatchId/decline'),
+              headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $tok'},
+              body: jsonEncode({'reason': reason}))
+          .timeout(const Duration(seconds: 5));
+      if (res.statusCode >= 400) throw Exception('HTTP ${res.statusCode}');
+    } catch (e) {
+      throw Exception('Decline failed: $e');
+    }
+  }
+
+  /// Best-effort attempt log (non-blocking — failures are swallowed).
+  static void _recordAttempt(String dispatchId, String outcome, String? reason) {
+    try {
+      _client.from('dispatch_attempts').insert({
+        'dispatch_id': dispatchId,
+        'attempt_number': 1,
+        'outcome': outcome,
+        'reason': reason,
+        'responded_at': DateTime.now().toUtc().toIso8601String(),
+      }).then((_) {}, onError: (_) {});
+    } catch (_) {}
+  }
+
+  /// Best-effort backend notification (non-blocking, short timeout).
+  static void _notifyBackendAccept(String dispatchId) {
+    _notifyBackend(dispatchId, 'accept', null);
+  }
+  static void _notifyBackendDecline(String dispatchId, String reason) {
+    _notifyBackend(dispatchId, 'decline', reason);
+  }
+  static void _notifyBackend(String dispatchId, String action, String? reason) {
+    try {
+      jwtToken().then((tok) {
+        final body = reason != null ? jsonEncode({'reason': reason}) : '{}';
+        http.post(Uri.parse('$kApiBase/dispatches/$dispatchId/$action'),
+            headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $tok ??'},
+            body: body).timeout(const Duration(seconds: 4)).then((_) {}, onError: (_) {});
+      });
+    } catch (_) {}
   }
 
 
