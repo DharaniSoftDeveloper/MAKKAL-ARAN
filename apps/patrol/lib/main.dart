@@ -20,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 // `MapType` is exported by both google_maps_flutter and supabase_flutter
 // (storage_client iceberg types) — always take the map SDK's definition.
 import 'package:supabase_flutter/supabase_flutter.dart' hide MapType;
@@ -383,10 +384,29 @@ class PatrolSession {
 
 class AppMeta {
   static const appName = 'MakkalAran Patrol';
-  static const appVersion = '1.3.0';
-  static const versionCode = 100;
+  static String appVersion = '1.4.0';
+  static int versionCode = 106;
   static const developer = 'Creative Hub Developers';
-  static const channel = 'patrol'; // Firestore key prefix for update checks
+  static const channel = 'patrol'; // update-manifest key prefix
+
+  /// ROOT-CAUSE FIX for the "update loop":
+  /// Reads the REAL installed version from the APK (via package_info_plus) so
+  /// the updater compares the server versionCode against the ACTUAL installed
+  /// code — never a stale hardcoded constant (100). Once the new APK is
+  /// installed, this moves to the new build's code and the update prompt stops
+  /// repeating forever. Loaded once, then awaited by AppUpdateService.check().
+  static Future<void>? _loading;
+  static Future<void> loadVersion() => _loading ??= _loadVersion();
+
+  static Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final code = int.tryParse(info.buildNumber);
+      if (code != null && code > 0) versionCode = code;
+      if (info.version.isNotEmpty) appVersion = info.version;
+      debugPrint('[APP] Installed version: $appVersion (code $versionCode)');
+    } catch (_) {}
+  }
 }
 
 class AppUpdateService {
@@ -395,6 +415,50 @@ class AppUpdateService {
   /// Returns {available, version, url, notes}. Falls back to the legacy
   /// Firestore settings/app doc when the backend is unreachable.
   static Future<Map<String, dynamic>> check() async {
+    await AppMeta.loadVersion(); // compare against the REAL installed code
+    // ---- 1. SUPABASE OTA manifest (any network, zero redirects) ------------
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final res = await http
+            .get(Uri.parse(
+                'https://wmlcnmtnvjndlzahmocc.supabase.co/storage/v1/object/public/ota/update.json'))
+            .timeout(const Duration(seconds: 15));
+        if (res.statusCode == 200) {
+          final config = jsonDecode(res.body) as Map<String, dynamic>;
+          // Get 'patrol' app config from update.json (also accept the
+          // backend-style 'android-patrol' key as an alias).
+          final appConfig = (config['patrol'] as Map<String, dynamic>?) ??
+              (config['android-patrol'] as Map<String, dynamic>?);
+          if (appConfig != null) {
+            final latest = (appConfig['version'] ?? '').toString();
+            final rawCode = appConfig['versionCode'];
+            final cloudCode =
+                rawCode is num ? rawCode.toInt() : int.tryParse('$rawCode') ?? 0;
+            if (latest.isNotEmpty && cloudCode > AppMeta.versionCode) {
+              debugPrint(
+                  '[UPDATE] Supabase OTA: v$latest (code $cloudCode) > ${AppMeta.versionCode}');
+              return {
+                'available': true,
+                'version': latest,
+                'versionCode': cloudCode,
+                'url': (appConfig['apkUrl'] ?? '').toString(),
+                'notes': (appConfig['changelog'] as List?)?.join('\n') ?? '',
+              };
+            }
+            debugPrint(
+                '[UPDATE] Supabase OTA manifest OK but no newer release (cloud $cloudCode, installed ${AppMeta.versionCode})');
+            break;
+          }
+        } else {
+          debugPrint(
+              '[UPDATE] Supabase OTA HTTP ${res.statusCode} (attempt $attempt/3)');
+        }
+      } catch (e) {
+        debugPrint('[UPDATE] Supabase OTA attempt $attempt/3 failed: $e');
+        if (attempt < 3) await Future.delayed(Duration(seconds: attempt));
+      }
+    }
+    // ---- 2. LAN backend registry -------------------------------------------
     try {
       final res = await http
           .get(Uri.parse('$kApiBase/updates/latest?platform=android-patrol'))
@@ -869,7 +933,7 @@ class _PatrolHomeState extends State<PatrolHome> {
                   FilledButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      setState(() => _tab = 4); // jump to Settings tab
+                      setState(() => _tab = 5); // jump to Settings tab
                     },
                     style: FilledButton.styleFrom(backgroundColor: const Color(0xFF06B6D4)),
                     child: const Text('Open Settings'),
@@ -890,6 +954,7 @@ class _PatrolHomeState extends State<PatrolHome> {
         onOpenAssignments: (dispatchId) => setState(() { _pendingDispatchFromNotification = dispatchId; _tab = 1; }),
       ),
       AssignmentsTab(session: sess, focusDispatchId: _pendingDispatchFromNotification),
+      LiveMapTab(session: sess),
       CameraSearchTab(session: sess),
       ProfileTab(session: sess, onLogout: _logout),
       const SettingsTab(),
@@ -904,6 +969,7 @@ class _PatrolHomeState extends State<PatrolHome> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.assignment_outlined), selectedIcon: Icon(Icons.assignment), label: 'Tasks'),
+          NavigationDestination(icon: Icon(Icons.map_outlined), selectedIcon: Icon(Icons.map), label: 'Live Map'),
           NavigationDestination(icon: Icon(Icons.videocam_outlined), selectedIcon: Icon(Icons.videocam), label: 'Cameras'),
           NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
           NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Settings'),
@@ -4037,4 +4103,245 @@ class _InfoRow2 extends StatelessWidget {
       Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13), textAlign: TextAlign.end, overflow: TextOverflow.ellipsis)),
     ]),
   );
+}
+
+// ============================================================================
+// Live Map Tab — live Google map: my position, peer patrol units and active
+// SOS incidents, straight from the same Supabase tables the Control Room
+// dispatch engine and the Public app's Safety Radar read.
+// ============================================================================
+
+/// Immutable snapshot of the live map data for [LiveMapTab].
+class _PatrolMapSnapshot {
+  final List<Map<String, dynamic>> patrols;
+  final List<Map<String, dynamic>> sos;
+  const _PatrolMapSnapshot({required this.patrols, required this.sos});
+  factory _PatrolMapSnapshot.empty() =>
+      const _PatrolMapSnapshot(patrols: [], sos: []);
+}
+
+class LiveMapTab extends StatefulWidget {
+  final PatrolSession session;
+  const LiveMapTab({super.key, required this.session});
+  @override
+  State<LiveMapTab> createState() => _LiveMapTabState();
+}
+
+class _LiveMapTabState extends State<LiveMapTab> {
+  GoogleMapController? _mapController;
+  LatLng _current = const LatLng(12.5209, 78.2134);
+  StreamSubscription<Position>? _positionSub;
+  Timer? _refreshTimer;
+  Future<_PatrolMapSnapshot>? _snapshot;
+  bool _didCenter = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _startGps();
+    _snapshot = _load();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) setState(() => _snapshot = _load());
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _positionSub?.cancel();
+    super.dispose();
+  }
+
+  /// Live GPS of THIS device. The 5s presence upsert on the Dashboard remains
+  /// the dispatch-facing stream; this one only drives the smooth local map.
+  void _startGps() {
+    _positionSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high, distanceFilter: 10),
+    ).listen((pos) {
+      if (!mounted) return;
+      final p = LatLng(pos.latitude, pos.longitude);
+      setState(() => _current = p);
+      if (!_didCenter) {
+        _didCenter = true;
+        _mapController?.animateCamera(CameraUpdate.newLatLngZoom(p, 15));
+      }
+    });
+  }
+
+  /// Same Supabase reads as the Control Room Live Map + Public Safety Radar:
+  /// patrol_presence (peer units) + active sos_events (incidents + dispatch
+  /// links via assigned_patrol_id).
+  Future<_PatrolMapSnapshot> _load() async {
+    try {
+      final client = Supabase.instance.client;
+      final results = await Future.wait([
+        client
+            .from('patrol_presence')
+            .select('patrol_id,latitude,longitude,status,updated_at'),
+        client
+            .from('sos_events')
+            .select('sos_id,status,assigned_patrol_id,created_at,data')
+            .inFilter(
+                'status', ['ACTIVE', 'DISPATCHED', 'RESPONDING', 'EN_ROUTE'])
+            .order('created_at', ascending: false)
+            .limit(50),
+      ]);
+      return _PatrolMapSnapshot(
+        patrols: List<Map<String, dynamic>>.from(results[0] as List),
+        sos: List<Map<String, dynamic>>.from(results[1] as List),
+      );
+    } catch (e) {
+      debugPrint('[LIVE MAP] load failed: $e');
+      if (mounted) setState(() => _error = '$e');
+      return _PatrolMapSnapshot.empty();
+    }
+  }
+
+  /// True when a presence row is inside the 180s freshness window used by the
+  /// Control Room dispatch engine.
+  bool _isFresh(dynamic updatedAt) {
+    final t = DateTime.tryParse('${updatedAt ?? ''}')?.toUtc();
+    if (t == null) return false;
+    return DateTime.now().toUtc().difference(t) < const Duration(seconds: 180);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const Text('Live Operations Map',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text(
+              'My position, peer patrol units and active SOS incidents — live from Supabase',
+              style: TextStyle(color: Colors.grey, fontSize: 13)),
+          const SizedBox(height: 16),
+          if (_error != null)
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10)),
+              child: Text('Live data unavailable: $_error',
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+            ),
+          FutureBuilder<_PatrolMapSnapshot>(
+            future: _snapshot,
+            builder: (context, snap) {
+              final data = snap.data ?? _PatrolMapSnapshot.empty();
+              final markers = <Marker>{
+                Marker(
+                  markerId: const MarkerId('me'),
+                  position: _current,
+                  infoWindow: InfoWindow(
+                      title: 'My position',
+                      snippet: widget.session.patrolId),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueAzure),
+                ),
+              };
+
+              final patrolPos = <String, LatLng>{};
+              for (final p in data.patrols) {
+                final lat = (p['latitude'] as num?)?.toDouble();
+                final lng = (p['longitude'] as num?)?.toDouble();
+                if (lat == null || lng == null || (lat == 0 && lng == 0)) {
+                  continue;
+                }
+                final pid = (p['patrol_id'] ?? '').toString();
+                if (pid == widget.session.patrolId) {
+                  continue; // own position already drawn as 'me'
+                }
+                final pos = LatLng(lat, lng);
+                patrolPos[pid] = pos;
+                final fresh = _isFresh(p['updated_at']);
+                markers.add(Marker(
+                  markerId: MarkerId('patrol_$pid'),
+                  position: pos,
+                  infoWindow: InfoWindow(
+                      title: 'Patrol $pid',
+                      snippet:
+                          '${p['status'] ?? 'UNKNOWN'}${fresh ? '' : ' (stale)'}'),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(fresh
+                      ? BitmapDescriptor.hueGreen
+                      : BitmapDescriptor.hueOrange),
+                ));
+              }
+              final circles = <Circle>{};
+              final polylines = <Polyline>{};
+              for (final s in data.sos) {
+                final d = (s['data'] ?? const {}) as Map<String, dynamic>;
+                final lat = (d['latitude'] as num?)?.toDouble();
+                final lng = (d['longitude'] as num?)?.toDouble();
+                if (lat == null || lng == null || (lat == 0 && lng == 0)) {
+                  continue;
+                }
+                final sosPoint = LatLng(lat, lng);
+                final sosId = (s['sos_id'] ?? '').toString();
+                markers.add(Marker(
+                  markerId: MarkerId('sos_$sosId'),
+                  position: sosPoint,
+                  infoWindow: InfoWindow(
+                      title: 'SOS $sosId',
+                      snippet: '${s['status'] ?? 'ACTIVE'}'),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueRed),
+                ));
+                circles.add(Circle(
+                  circleId: CircleId('sos_acc_$sosId'),
+                  center: sosPoint,
+                  radius: ((d['accuracy'] as num?)?.toDouble() ?? 150)
+                      .clamp(50.0, 1000.0)
+                      .toDouble(),
+                  fillColor: Colors.red.withValues(alpha: 0.12),
+                  strokeColor: Colors.redAccent,
+                  strokeWidth: 1,
+                ));
+                // Assigned dispatch route: my unit -> the SOS I respond to.
+                if ((s['assigned_patrol_id'] ?? '').toString() ==
+                    widget.session.patrolId) {
+                  polylines.add(Polyline(
+                    polylineId: PolylineId('my_route_$sosId'),
+                    points: [_current, sosPoint],
+                    color: Colors.cyanAccent,
+                    width: 5,
+                  ));
+                }
+              }
+              return Column(children: [
+                SizedBox(
+                  height: 440,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: GoogleMap(
+                      initialCameraPosition:
+                          CameraPosition(target: _current, zoom: 14),
+                      myLocationEnabled: true,
+                      myLocationButtonEnabled: true,
+                      zoomControlsEnabled: true,
+                      markers: markers,
+                      circles: circles,
+                      polylines: polylines,
+                      onMapCreated: (c) => _mapController = c,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snap.connectionState == ConnectionState.waiting
+                      ? 'Loading live data...'
+                      : 'LIVE · ${data.patrols.length} peer unit(s) · ${data.sos.length} active SOS · refreshes every 15s',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ]);
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }

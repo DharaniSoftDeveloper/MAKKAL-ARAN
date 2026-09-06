@@ -379,10 +379,30 @@ class SafetyService {
   }
 
   // Authentication
+  // Singleton GoogleSignIn instance — reusing one instance prevents the
+  // PlatformException(sign_in_failed) that occurs when a fresh local
+  // GoogleSignIn is constructed on every call (the plugin's internal
+  // pending-auth state gets stuck and never resolves).
+  //
+  // serverClientId MUST be the WEB OAuth client (client_type=3) from the
+  // Firebase project — NOT the Android client. Without this, the plugin
+  // tries to use the Android OAuth client which does not work for Google
+  // Sign-In, and throws PlatformException(sign_in_failed).
+  static final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email'],
+    serverClientId:
+        '625301124577-03od88436d622p5cjf1pdu3pgapitlnt.apps.googleusercontent.com',
+  );
+
   static Future<Map<String, dynamic>> loginWithGoogle() async {
     try {
-      final GoogleSignIn googleSignIn = GoogleSignIn(scopes: ['email']);
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      // Always sign out first to clear any stuck pending-auth state from a
+      // previous attempt (cancelled dialog, network drop, etc.). Without this
+      // the next signIn() can throw PlatformException(sign_in_failed).
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         throw Exception('Google sign in was cancelled');
       }
@@ -2017,10 +2037,16 @@ class _LiveSafetyRadarTabState extends State<LiveSafetyRadarTab> {
   LatLng _current = const LatLng(12.5209, 78.2134);
   double _accuracy = 100;
   StreamSubscription<Position>? _positionSub;
+  Timer? _mapTimer;
+  Future<_LiveMapData>? _mapData;
 
   @override
   void initState() {
     super.initState();
+    _mapData = _loadLiveMapData();
+    _mapTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) setState(() => _mapData = _loadLiveMapData());
+    });
     SafetyService.getCurrentLocation().then((pos) {
       if (pos == null || !mounted) return;
       setState(() {
@@ -2042,8 +2068,32 @@ class _LiveSafetyRadarTabState extends State<LiveSafetyRadarTab> {
 
   @override
   void dispose() {
+    _mapTimer?.cancel();
     _positionSub?.cancel();
     super.dispose();
+  }
+
+  /// LIVE MAP DATA (Supabase): patrol_presence + active sos_events.
+  /// These are the SAME Supabase tables the Control Room dispatch engine and
+  /// the Patrol app use — replacing the dead Firestore `patrol_teams` /
+  /// `sos_events` collections that never contained any documents.
+  Future<_LiveMapData> _loadLiveMapData() async {
+    final client = Supabase.instance.client;
+    final results = await Future.wait([
+      client
+          .from('patrol_presence')
+          .select('patrol_id,latitude,longitude,status,updated_at'),
+      client
+          .from('sos_events')
+          .select('sos_id,status,assigned_patrol_id,created_at,data')
+          .inFilter('status', ['ACTIVE', 'DISPATCHED', 'RESPONDING', 'EN_ROUTE'])
+          .order('created_at', ascending: false)
+          .limit(50),
+    ]);
+    return _LiveMapData(
+      patrols: List<Map<String, dynamic>>.from(results[0] as List),
+      sos: List<Map<String, dynamic>>.from(results[1] as List),
+    );
   }
 
   @override
@@ -2055,89 +2105,102 @@ class _LiveSafetyRadarTabState extends State<LiveSafetyRadarTab> {
           Text(widget.isTamil ? 'நேரடி பாதுகாப்பு வரைபடம்' : 'Live Google Safety Map', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           Text(widget.isTamil ? 'உங்கள் பகுதியின் நேரடி பாதுகாப்பு நிலை' : 'Google Maps view with live public location, patrols and SOS markers', style: const TextStyle(color: Colors.grey, fontSize: 13)),
           const SizedBox(height: 16),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('patrol_teams').snapshots(),
-            builder: (context, patrolSnap) {
-              return StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('sos_events').where('status', whereIn: ['ACTIVE', 'DISPATCHED', 'RESPONDING', 'EN_ROUTE']).snapshots(),
-                builder: (context, sosSnap) {
-                  final markers = <Marker>{
-                    Marker(markerId: const MarkerId('me'), position: _current, infoWindow: const InfoWindow(title: 'My live location'), icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure)),
-                  };
-                  final circles = <Circle>{
-                    Circle(circleId: const CircleId('me_accuracy'), center: _current, radius: _accuracy, fillColor: Colors.blue.withValues(alpha: 0.12), strokeColor: Colors.blueAccent, strokeWidth: 1),
-                  };
-                  for (final doc in patrolSnap.data?.docs ?? []) {
-                    final d = doc.data() as Map<String, dynamic>;
-                    final lat = (d['latitude'] as num?)?.toDouble();
-                    final lng = (d['longitude'] as num?)?.toDouble();
-                    if (lat == null || lng == null) continue;
-                    markers.add(Marker(markerId: MarkerId('patrol_${doc.id}'), position: LatLng(lat, lng), infoWindow: InfoWindow(title: d['teamName'] ?? 'Patrol', snippet: d['status'] ?? ''), icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)));
-                  }
-                  final polylines = <Polyline>{};
-                  for (final doc in sosSnap.data?.docs ?? []) {
-                    final d = doc.data() as Map<String, dynamic>;
-                    final lat = (d['latitude'] as num?)?.toDouble();
-                    final lng = (d['longitude'] as num?)?.toDouble();
-                    if (lat == null || lng == null) continue;
-                    final sosPoint = LatLng(lat, lng);
-                    markers.add(Marker(markerId: MarkerId('sos_${doc.id}'), position: sosPoint, infoWindow: InfoWindow(title: 'SOS ${d['sosId'] ?? doc.id}', snippet: d['status'] ?? 'ACTIVE'), icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed)));
-                    circles.add(Circle(circleId: CircleId('sos_accuracy_${doc.id}'), center: sosPoint, radius: ((d['accuracy'] as num?)?.toDouble() ?? 100), fillColor: Colors.red.withValues(alpha: 0.12), strokeColor: Colors.redAccent, strokeWidth: 1));
-                    final assignedPatrolId = (d['assignedPatrolId'] ?? '').toString();
-                    if (assignedPatrolId.isNotEmpty) {
-                      for (final pDoc in patrolSnap.data?.docs ?? []) {
-                        final pData = pDoc.data() as Map<String, dynamic>;
-                        if (pDoc.id != assignedPatrolId && pData['patrolId'] != assignedPatrolId) continue;
-                        final pLat = (pData['latitude'] as num?)?.toDouble();
-                        final pLng = (pData['longitude'] as num?)?.toDouble();
-                        if (pLat == null || pLng == null) continue;
-                        polylines.add(Polyline(
-                          polylineId: PolylineId('route_${pDoc.id}_${doc.id}'),
-                          points: [LatLng(pLat, pLng), sosPoint],
-                          color: Colors.cyanAccent,
-                          width: 5,
-                        ));
-                      }
-                    }
-                  }
-                  return SizedBox(
-                    height: 420,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: GoogleMap(
-                        initialCameraPosition: CameraPosition(target: _current, zoom: 14),
-                        myLocationEnabled: true,
-                        myLocationButtonEnabled: true,
-                        zoomControlsEnabled: true,
-                        mapToolbarEnabled: true,
-                        markers: markers,
-                        circles: circles,
-                        polylines: polylines,
-                        onMapCreated: (c) => _mapController = c,
-                      ),
+          FutureBuilder<_LiveMapData>(
+            future: _mapData,
+            builder: (context, snap) {
+              final data = snap.data ?? _LiveMapData.empty();
+              final markers = <Marker>{
+                Marker(markerId: const MarkerId('me'), position: _current, infoWindow: const InfoWindow(title: 'My live location'), icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure)),
+              };
+              final circles = <Circle>{
+                Circle(circleId: const CircleId('me_accuracy'), center: _current, radius: _accuracy, fillColor: Colors.blue.withValues(alpha: 0.12), strokeColor: Colors.blueAccent, strokeWidth: 1),
+              };
+              final patrolPos = <String, LatLng>{};
+              for (final p in data.patrols) {
+                final lat = (p['latitude'] as num?)?.toDouble();
+                final lng = (p['longitude'] as num?)?.toDouble();
+                if (lat == null || lng == null || (lat == 0 && lng == 0)) continue;
+                final pos = LatLng(lat, lng);
+                final pid = (p['patrol_id'] ?? '').toString();
+                if (pid.isNotEmpty) patrolPos[pid] = pos;
+                final fresh = _liveIsFresh(p['updated_at']);
+                markers.add(Marker(
+                  markerId: MarkerId('patrol_$pid'),
+                  position: pos,
+                  infoWindow: InfoWindow(title: 'Patrol $pid', snippet: '${p['status'] ?? 'UNKNOWN'}${fresh ? '' : ' (stale)'}'),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(fresh ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueOrange),
+                ));
+              }
+              final polylines = <Polyline>{};
+              for (final s in data.sos) {
+                final d = (s['data'] ?? const {}) as Map<String, dynamic>;
+                final lat = (d['latitude'] as num?)?.toDouble();
+                final lng = (d['longitude'] as num?)?.toDouble();
+                if (lat == null || lng == null || (lat == 0 && lng == 0)) continue;
+                final sosPoint = LatLng(lat, lng);
+                final sosId = (s['sos_id'] ?? '').toString();
+                markers.add(Marker(markerId: MarkerId('sos_$sosId'), position: sosPoint, infoWindow: InfoWindow(title: 'SOS $sosId', snippet: '${s['status'] ?? 'ACTIVE'}'), icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed)));
+                circles.add(Circle(circleId: CircleId('sos_acc_$sosId'), center: sosPoint, radius: ((d['accuracy'] as num?)?.toDouble() ?? 150).clamp(50.0, 1000.0).toDouble(), fillColor: Colors.red.withValues(alpha: 0.12), strokeColor: Colors.redAccent, strokeWidth: 1));
+                // Dispatch route: assigned patrol -> SOS. Mirrors the Control
+                // Room dispatch engine's assigned_patrol_id link.
+                final pPos = patrolPos[(s['assigned_patrol_id'] ?? '').toString()];
+                if (pPos != null) {
+                  polylines.add(Polyline(polylineId: PolylineId('route_${s['assigned_patrol_id']}_$sosId'), points: [pPos, sosPoint], color: Colors.cyanAccent, width: 5));
+                }
+              }
+              return Column(children: [
+                SizedBox(
+                  height: 420,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: GoogleMap(
+                      initialCameraPosition: CameraPosition(target: _current, zoom: 14),
+                      myLocationEnabled: true,
+                      myLocationButtonEnabled: true,
+                      zoomControlsEnabled: true,
+                      mapToolbarEnabled: true,
+                      markers: markers,
+                      circles: circles,
+                      polylines: polylines,
+                      onMapCreated: (c) => _mapController = c,
                     ),
-                  );
-                },
-              );
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snap.connectionState == ConnectionState.waiting
+                      ? 'Loading live patrol & SOS data...'
+                      : 'LIVE · ${data.patrols.length} patrol unit(s) · ${data.sos.length} active SOS · refreshes every 15s',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ]);
             },
           ),
           const SizedBox(height: 20),
           const Text('Active Response Patrol Units', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('patrol_teams').snapshots(),
+          FutureBuilder<_LiveMapData>(
+            future: _mapData,
             builder: (context, snapshot) {
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Text('Loading patrol status...');
-              return Column(children: snapshot.data!.docs.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+              final data = snapshot.data;
+              if (data == null) {
+                return const Text('Loading patrol status...', style: TextStyle(color: Colors.grey));
+              }
+              if (data.patrols.isEmpty) {
+                return const Text('No patrol units currently on duty.', style: TextStyle(color: Colors.grey));
+              }
+              return Column(children: data.patrols.map((p) {
+                final pid = (p['patrol_id'] ?? '').toString();
+                final status = (p['status'] ?? 'UNKNOWN').toString();
+                final fresh = _liveIsFresh(p['updated_at']);
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: const Color(0xFF111827), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF1F2937))),
                   child: Row(children: [
-                    const Icon(Icons.local_police_rounded, color: Colors.greenAccent, size: 24),
+                    Icon(Icons.local_police_rounded, color: fresh ? Colors.greenAccent : Colors.orangeAccent, size: 24),
                     const SizedBox(width: 12),
-                    Expanded(child: Text('${data['teamName'] ?? 'Patrol Unit'} · ${data['status'] ?? 'UNKNOWN'}', style: const TextStyle(fontSize: 13))),
+                    Expanded(child: Text('Patrol $pid · $status${fresh ? '' : ' · last seen ${_liveAgo(p['updated_at'])}'}', style: const TextStyle(fontSize: 13))),
                   ]),
                 );
               }).toList());
@@ -2147,6 +2210,32 @@ class _LiveSafetyRadarTabState extends State<LiveSafetyRadarTab> {
       ),
     );
   }
+}
+
+/// Snapshot of live Supabase map data for the citizen safety radar — the same
+/// tables the Control Room dispatch engine and the Patrol app use.
+class _LiveMapData {
+  final List<Map<String, dynamic>> patrols;
+  final List<Map<String, dynamic>> sos;
+  const _LiveMapData({required this.patrols, required this.sos});
+  factory _LiveMapData.empty() => const _LiveMapData(patrols: [], sos: []);
+}
+
+/// True when the presence row was refreshed inside the Control Room's
+/// 180-second freshness window (same rule as the dispatch engine).
+bool _liveIsFresh(dynamic updatedAt) {
+  final t = DateTime.tryParse('${updatedAt ?? ''}')?.toUtc();
+  if (t == null) return false;
+  return DateTime.now().toUtc().difference(t) < const Duration(seconds: 180);
+}
+
+/// Human-friendly "seconds/minutes ago" label for stale presence rows.
+String _liveAgo(dynamic updatedAt) {
+  final t = DateTime.tryParse('${updatedAt ?? ''}')?.toUtc();
+  if (t == null) return 'unknown';
+  final s = DateTime.now().toUtc().difference(t).inSeconds;
+  if (s < 60) return '${s}s ago';
+  return '${s ~/ 60}m ago';
 }
 
 // ============================================================================

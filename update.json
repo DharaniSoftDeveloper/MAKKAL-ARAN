@@ -1,26 +1,30 @@
 {
   "patrol": {
-    "version": "1.3.4",
-    "versionCode": 104,
-    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.3.4/MAKKAL-ARAN-Patrol-v1.3.4.apk",
+    "version": "1.4.0",
+    "versionCode": 106,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.0/MAKKAL-ARAN-Patrol-v1.4.0.apk",
     "changelog": [
-      "Update loop fixed - apps now compare their REAL installed version",
-      "MAKKAL ARAN v1.3.4 (code 104)"
+      "NEW: Live Map tab — see all patrol units & active SOS alerts in real time on Google Maps",
+      "Your own position + assigned SOS response route shown live",
+      "FIXED: update loop — app now reads its real installed version",
+      "Faster, more reliable OTA updates via Supabase"
     ],
     "forceUpdate": false,
-    "minVersionCode": 103
+    "minVersionCode": 104
   },
   "public": {
-    "version": "1.3.4",
-    "versionCode": 104,
-    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.3.4/MAKKAL-ARAN-Public-v1.3.4.apk",
+    "version": "1.4.0",
+    "versionCode": 106,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.0/MAKKAL-ARAN-Public-v1.4.0.apk",
     "changelog": [
-      "Update loop fixed - apps now compare their REAL installed version",
-      "MAKKAL ARAN v1.3.4 (code 104)"
+      "NEW: Live Google Safety Map now shows REAL patrol units & live SOS alerts",
+      "FIXED: map was reading a dead data source — now streams live from Supabase",
+      "See response routes from assigned patrols to active SOS alerts",
+      "Faster, more reliable OTA updates"
     ],
     "forceUpdate": false,
-    "minVersionCode": 103
+    "minVersionCode": 104
   },
-  "releaseDate": "2026-09-04",
+  "releaseDate": "2026-09-06",
   "serverStatus": "active"
 }

@@ -18,8 +18,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Build-time version markers (override with --dart-define).
-const int kAppVersionCode = int.fromEnvironment('APP_VERSION_CODE', defaultValue: 104);
-const String kAppVersionName = String.fromEnvironment('APP_VERSION_NAME', defaultValue: '1.3.4');
+const int kAppVersionCode = int.fromEnvironment('APP_VERSION_CODE', defaultValue: 106);
+const String kAppVersionName = String.fromEnvironment('APP_VERSION_NAME', defaultValue: '1.4.0');
 
 // ---------------------------------------------------------------------------
 // REAL installed version (read from the APK at runtime).

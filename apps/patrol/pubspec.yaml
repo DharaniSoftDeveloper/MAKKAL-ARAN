@@ -1,7 +1,7 @@
 name: safesight_patrol
 description: MakkalAran Patrol Application - Mobile dispatch and incident response for patrol teams.
 publish_to: 'none'
-version: 1.3.4+104
+version: 1.4.0+106
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
