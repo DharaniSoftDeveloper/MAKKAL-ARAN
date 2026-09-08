@@ -2,11 +2,11 @@
     "releaseDate":  "2026-09-08",
     "patrol":  {
                    "changelog":  [
-                                     "FIXED: Update install \"Future not completed\" error - timeout + manual install fallback",
-                                     "FIXED: ACCEPT/DECLINE buttons now work (writes real DB columns)",
-                                     "FIXED: SOS live audio/video - timeout banner, retry button, clear errors",
-                                     "NEW: Forgot Password button on login screen (email reset)",
-                                     "Supabase-only auto-dispatch worker with 429 backoff"
+                                     "FIXED: Update download stall - no more hanging on connecting",
+                                     "FIXED: Login error shows connection vs credential error",
+                                     "FIXED: ACCEPT/DECLINE buttons work",
+                                     "FIXED: SOS video timeout + retry",
+                                     "NEW: Forgot Password"
                                  ],
                    "version":  "1.4.2",
                    "versionCode":  108,
@@ -17,7 +17,7 @@
     "serverStatus":  "active",
     "public":  {
                    "changelog":  [
-                                     "Previous release"
+                                     "Previous"
                                  ],
                    "version":  "1.4.1",
                    "versionCode":  107,
