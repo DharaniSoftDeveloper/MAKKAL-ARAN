@@ -1,1 +1,27 @@
-﻿{"patrol": {"version": "1.4.1", "versionCode": 107, "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.1/MAKKAL-ARAN-Patrol-v1.4.1.apk", "changelog": ["OTA update test v1.4.1", "Forced update test"], "forceUpdate": true, "minVersionCode": 106}, "public": {"version": "1.4.1", "versionCode": 107, "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.1/MAKKAL-ARAN-Public-v1.4.1.apk", "changelog": ["OTA update test v1.4.1", "Forced update test"], "forceUpdate": true, "minVersionCode": 106}, "releaseDate": "2026-09-06", "serverStatus": "active"}
+{
+    "releaseDate":  "2026-09-08",
+    "patrol":  {
+                   "changelog":  [
+                                     "Auto-dispatch engine: Supabase-only worker + 429 backoff + startup reconciliation",
+                                     "ACCEPT/DECLINE buttons fixed: writes real DB columns (no more schema-cache crash)",
+                                     "SOS live audio/video: timeout banner, retry button, clear error states",
+                                     "Dispatch worker hardened and running in supabase-only mode"
+                                 ],
+                   "version":  "1.4.2",
+                   "versionCode":  108,
+                   "minVersionCode":  106,
+                   "forceUpdate":  true,
+                   "apkUrl":  "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.2/MAKKAL-ARAN-Patrol-v1.4.2.apk"
+               },
+    "serverStatus":  "active",
+    "public":  {
+                   "changelog":  [
+                                     "Previous release"
+                                 ],
+                   "version":  "1.4.1",
+                   "versionCode":  107,
+                   "minVersionCode":  106,
+                   "forceUpdate":  true,
+                   "apkUrl":  "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.1/MAKKAL-ARAN-Public-v1.4.1.apk"
+               }
+}
