@@ -1,28 +1,29 @@
 {
-    "releaseDate":  "2026-09-08",
-    "patrol":  {
-                   "changelog":  [
-                                     "FIXED: Update download stall - no more hanging on connecting",
-                                     "FIXED: Login error shows connection vs credential error",
-                                     "FIXED: ACCEPT/DECLINE buttons work",
-                                     "FIXED: SOS video timeout + retry",
-                                     "NEW: Forgot Password"
-                                 ],
-                   "version":  "1.4.2",
-                   "versionCode":  108,
-                   "minVersionCode":  106,
-                   "forceUpdate":  true,
-                   "apkUrl":  "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.2/MAKKAL-ARAN-Patrol-v1.4.2.apk"
-               },
-    "serverStatus":  "active",
-    "public":  {
-                   "changelog":  [
-                                     "Previous"
-                                 ],
-                   "version":  "1.4.1",
-                   "versionCode":  107,
-                   "minVersionCode":  106,
-                   "forceUpdate":  true,
-                   "apkUrl":  "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.1/MAKKAL-ARAN-Public-v1.4.1.apk"
-               }
+  "patrol": {
+    "version": "1.4.3",
+    "versionCode": 109,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.3/MAKKAL-ARAN-Patrol-v1.4.3.apk",
+    "changelog": [
+      "FIXED: update stuck on 'connecting' - stall detection aborts after 30s",
+      "FIXED: login now shows 'Cannot connect to server' when offline",
+      "FIXED: ACCEPT/DECLINE buttons on dispatch alerts",
+      "FIXED: SOS live video timeout + retry button",
+      "NEW: Forgot Password link on login screen"
+    ],
+    "forceUpdate": true,
+    "minVersionCode": 106,
+    "fileSize": 137301902
+  },
+  "public": {
+    "version": "1.4.1",
+    "versionCode": 107,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.1/MAKKAL-ARAN-Public-v1.4.1.apk",
+    "changelog": [
+      "Previous release"
+    ],
+    "forceUpdate": true,
+    "minVersionCode": 106
+  },
+  "releaseDate": "2026-09-08",
+  "serverStatus": "active"
 }
