@@ -1,35 +1,37 @@
 {
   "patrol": {
-    "version": "1.4.9",
-    "versionCode": 115,
-    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.9/MAKKAL-ARAN-Patrol-v1.4.9.apk",
+    "version": "1.4.10",
+    "versionCode": 116,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.10/MAKKAL-ARAN-Patrol-v1.4.10.apk",
     "changelog": [
       "FIXED: Patrol manual and automatic dispatch delivery",
       "FIXED: DynamoDB dispatch accept/decline status updates",
       "FIXED: OTA manifest cache preventing updates from appearing",
       "FIXED: Repeated Patrol dispatch alerts and stale SENT cards",
       "FIXED: Patrol Accept/Decline controls and case status updates",
+      "NEW: Google-style alternate routes and live movement tracking",
       "FIXED: DynamoDB password reset and account provisioning",
       "UPDATED: Flutter 3.47.4 Android release",
       "NEW: DynamoDB live map, SOS tracking, road directions, and reliable patrol GPS sync"
     ],
     "forceUpdate": false,
     "minVersionCode": 106,
-    "fileSize": 137383822
+    "fileSize": 137465742
   },
   "public": {
-    "version": "1.4.3",
-    "versionCode": 109,
-    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.5/MAKKAL-ARAN-Public-v1.4.3.apk",
+    "version": "1.4.4",
+    "versionCode": 110,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.4/MAKKAL-ARAN-Public-v1.4.4.apk",
     "changelog": [
       "NEW: Firebase email password reset flow",
       "FIXED: SOS reliability and dispatch integration",
       "UPDATED: Flutter 3.47.4 Android release",
       "NEW: DynamoDB live safety map, live patrol/SOS tracking, and road directions"
+      ,"NEW: Google-style alternate routes and live movement tracking"
     ],
     "forceUpdate": false,
     "minVersionCode": 106,
-    "fileSize": 93387886
+    "fileSize": 93469806
   },
   "releaseDate": "2026-09-18",
   "serverStatus": "active"
