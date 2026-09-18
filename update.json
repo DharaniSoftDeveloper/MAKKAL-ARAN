@@ -1,29 +1,30 @@
 {
   "patrol": {
-    "version": "1.4.3",
-    "versionCode": 109,
-    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.3/MAKKAL-ARAN-Patrol-v1.4.3.apk",
+    "version": "1.4.4",
+    "versionCode": 110,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.4/MAKKAL-ARAN-Patrol-v1.4.4.apk",
     "changelog": [
-      "FIXED: update stuck on 'connecting' - stall detection aborts after 30s",
-      "FIXED: login now shows 'Cannot connect to server' when offline",
-      "FIXED: ACCEPT/DECLINE buttons on dispatch alerts",
-      "FIXED: SOS live video timeout + retry button",
-      "NEW: Forgot Password link on login screen"
+      "FIXED: DynamoDB password reset and account provisioning",
+      "FIXED: SOS alert delivery and nearest-patrol auto-dispatch reliability",
+      "UPDATED: Flutter 3.47.4 Android release"
     ],
-    "forceUpdate": true,
+    "forceUpdate": false,
     "minVersionCode": 106,
     "fileSize": 137301902
   },
   "public": {
-    "version": "1.4.1",
-    "versionCode": 107,
-    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.1/MAKKAL-ARAN-Public-v1.4.1.apk",
+    "version": "1.4.2",
+    "versionCode": 108,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.4/MAKKAL-ARAN-Public-v1.4.2.apk",
     "changelog": [
-      "Previous release"
+      "NEW: Firebase email password reset flow",
+      "FIXED: SOS reliability and dispatch integration",
+      "UPDATED: Flutter 3.47.4 Android release"
     ],
-    "forceUpdate": true,
-    "minVersionCode": 106
+    "forceUpdate": false,
+    "minVersionCode": 106,
+    "fileSize": 93387886
   },
-  "releaseDate": "2026-09-08",
+  "releaseDate": "2026-09-18",
   "serverStatus": "active"
 }
