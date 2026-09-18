@@ -19,15 +19,16 @@
     "fileSize": 137465742
   },
   "public": {
-    "version": "1.4.4",
-    "versionCode": 110,
-    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.4/MAKKAL-ARAN-Public-v1.4.4.apk",
+    "version": "1.4.5",
+    "versionCode": 111,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.5/MAKKAL-ARAN-Public-v1.4.5.apk",
     "changelog": [
       "NEW: Firebase email password reset flow",
       "FIXED: SOS reliability and dispatch integration",
       "UPDATED: Flutter 3.47.4 Android release",
       "NEW: DynamoDB live safety map, live patrol/SOS tracking, and road directions"
-      ,"NEW: Google-style alternate routes and live movement tracking"
+      "NEW: Google-style alternate routes and live movement tracking",
+      "FIXED: Public app update detection cache"
     ],
     "forceUpdate": false,
     "minVersionCode": 106,
@@ -36,3 +37,4 @@
   "releaseDate": "2026-09-18",
   "serverStatus": "active"
 }
+
