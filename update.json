@@ -1,12 +1,13 @@
 {
   "patrol": {
-    "version": "1.4.7",
-    "versionCode": 113,
-    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.7/MAKKAL-ARAN-Patrol-v1.4.7.apk",
+    "version": "1.4.8",
+    "versionCode": 114,
+    "apkUrl": "https://github.com/DharaniSoftDeveloper/MAKKAL-ARAN/releases/download/v1.4.8/MAKKAL-ARAN-Patrol-v1.4.8.apk",
     "changelog": [
       "FIXED: Patrol manual and automatic dispatch delivery",
       "FIXED: DynamoDB dispatch accept/decline status updates",
       "FIXED: OTA manifest cache preventing updates from appearing",
+      "FIXED: Repeated Patrol dispatch alerts and stale SENT cards",
       "FIXED: DynamoDB password reset and account provisioning",
       "UPDATED: Flutter 3.47.4 Android release",
       "NEW: DynamoDB live map, SOS tracking, road directions, and reliable patrol GPS sync"
